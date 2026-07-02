@@ -5,8 +5,7 @@
       "args": ["index.js"],
       "env": {
         "DEFOLD_PATH": "",
-        "BOB_PATH": "",
-        "MCP_TRANSPORT": "stdio"
+        "BOB_PATH": ""
       }
     }
   }

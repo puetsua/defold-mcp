@@ -1,7 +1,7 @@
 {
   "name": "defold-mcp",
-  "version": "1.2.7",
-  "description": "MCP server for the Defold game engine — compatible with OpenCode, Claude Code, Codex, and Cursor",
+  "version": "0.1.0",
+  "description": "MCP server for the Defold game engine",
   "main": "index.js",
   "bin": {
     "defold-mcp": "./index.js"
@@ -14,17 +14,12 @@
     "defold",
     "mcp",
     "model-context-protocol",
-    "game-engine",
-    "lua",
-    "opencode",
-    "claude-code",
-    "codex",
-    "cursor"
+    "game-engine"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/defold-mcp.git"
+    "url": "git+https://github.com/puetsua/defold-mcp.git"
   },
   "engines": {
     "node": ">=18.0.0"

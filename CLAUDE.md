@@ -6,7 +6,7 @@ This project is a Model Context Protocol (MCP) server for the Defold game engine
 
 - **Entry point:** `index.js`
 - **Run:** `node index.js`
-- **Transport:** stdio (configured via `MCP_TRANSPORT` env var)
+- **Transport:** stdio only
 
 ## Available Tools
 
@@ -42,10 +42,9 @@ This project is a Model Context Protocol (MCP) server for the Defold game engine
 
 ## Configuration
 
-Copy `.env.example` to `.env` and set:
+Create `.env` in the project root:
 - `DEFOLD_PATH` - Path to Defold editor binary
 - `BOB_PATH` - Path to bob.jar (optional, auto-downloaded)
-- `MCP_TRANSPORT` - Transport mode (stdio or ws)
 
 ## Platform Notes
 

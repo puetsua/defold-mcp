@@ -9,17 +9,20 @@ Setup instructions for using the defold-mcp server with **OpenCode**, **Claude C
 
 ## Environment
 
-Copy `.env.example` to `.env` and configure for your OS:
+Create `.env` in the project root:
 
-```bash
-cp .env.example .env
+```ini
+DEFOLD_PATH=/Applications/Defold.app/Contents/MacOS/Defold
+BOB_PATH=$HOME/defold/bob-1.9.6.jar
+MCP_HOST=localhost
+MCP_PORT=37415
 ```
 
 | Variable | Description |
 |----------|-------------|
 | `DEFOLD_PATH` | Path to the Defold editor binary |
 | `BOB_PATH` | Path to `bob.jar` (optional, auto-discovered or downloaded via `setup_bob`) |
-| `MCP_TRANSPORT` | Transport mode — must be `stdio` (WebSocket not implemented) |
+
 
 `DEFOLD_PATH` defaults differ by platform:
 
@@ -47,8 +50,7 @@ OpenCode reads this file automatically. No manual setup needed.
       "args": ["index.js"],
       "env": {
         "DEFOLD_PATH": "",
-        "BOB_PATH": "",
-        "MCP_TRANSPORT": "stdio"
+        "BOB_PATH": ""
       }
     }
   }
@@ -68,7 +70,6 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
       "command": "node",
       "args": ["${workspaceFolder}/index.js"],
       "env": {
-        "MCP_TRANSPORT": "stdio",
         "DEFOLD_PATH": "",
         "BOB_PATH": ""
       }
@@ -90,7 +91,6 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
       "command": "node",
       "args": ["${workspaceFolder}/index.js"],
       "env": {
-        "MCP_TRANSPORT": "stdio",
         "DEFOLD_PATH": "",
         "BOB_PATH": ""
       }
@@ -110,9 +110,8 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
       "command": "node",
       "args": ["${workspaceFolder}/index.js"],
       "env": {
-        "MCP_TRANSPORT": "stdio",
         "DEFOLD_PATH": "",
-        "MCP_PORT": "3000",
+        "MCP_PORT": "37415",
         "MCP_HOST": "localhost",
         "BOB_PATH": ""
       }
@@ -142,7 +141,6 @@ Add the server entry under `mcpServers`. Use **absolute paths** — `node` must 
       "command": "/path/to/node",
       "args": ["/path/to/defold-mcp/index.js"],
       "env": {
-        "MCP_TRANSPORT": "stdio",
         "DEFOLD_PATH": "/path/to/Defold",
         "BOB_PATH": ""
       }
@@ -166,7 +164,6 @@ If your agent supports MCP but doesn't have a dedicated config file here, add th
       "command": "node",
       "args": ["/path/to/defold-mcp/index.js"],
       "env": {
-        "MCP_TRANSPORT": "stdio",
         "DEFOLD_PATH": "/path/to/Defold"
       }
     }
@@ -185,3 +182,12 @@ node index.js
 ```
 
 If the server starts without errors, the setup is correct.
+
+## Example agent prompt
+
+Copy this into your favorite agent to have it configure defold-mcp automatically:
+
+> Read `SETUP.md` in this project and follow the instructions to configure
+> defold-mcp as an MCP server for my agent. Use the correct config format
+> for your agent type (OpenCode, Claude Code, Codex CLI, Cursor, or
+> Claude Desktop). Use absolute paths where needed.

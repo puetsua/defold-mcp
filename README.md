@@ -42,11 +42,24 @@ MCP server for the [Defold](https://defold.com) game engine — compatible with 
 git clone <repo-url> defold-mcp
 cd defold-mcp
 npm install
-cp .env.example .env   # edit DEFOLD_PATH for your OS
 ```
 
-**Windows**: `DEFOLD_PATH = C:\Program Files\Defold\Defold.exe`
-**macOS**: `DEFOLD_PATH = /Applications/Defold.app/Contents/MacOS/Defold`
+Create `.env` in the project root:
+
+```ini
+DEFOLD_PATH=/Applications/Defold.app/Contents/MacOS/Defold
+BOB_PATH=$HOME/defold/bob-1.9.6.jar
+MCP_HOST=localhost
+MCP_PORT=37415
+```
+
+`DEFOLD_PATH` defaults by platform:
+
+| Platform | Path |
+|----------|------|
+| macOS | `/Applications/Defold.app/Contents/MacOS/Defold` |
+| Windows | `C:\Program Files\Defold\Defold.exe` |
+| Linux | `/usr/bin/Defold` |
 
 ## Agent Setup
 

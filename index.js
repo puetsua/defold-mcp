@@ -33,7 +33,7 @@ process.stdout.setMaxListeners(0);
 process.stdout.write('');
 console.error('Forced unbuffered stdout');
 
-const MCP_PORT = process.env.MCP_PORT || 3000;
+const MCP_PORT = process.env.MCP_PORT || 37415;
 console.error(`MCP_PORT: ${MCP_PORT}`);
 const MCP_HOST = process.env.MCP_HOST || 'localhost';
 console.error(`MCP_HOST: ${MCP_HOST}`);

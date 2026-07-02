@@ -25,7 +25,7 @@ No lint, no typecheck, no formatter, no CI — do not waste time looking for the
 ## MCP protocol details
 
 - **Stdout** = JSON-RPC messages (protocol); **stderr** = debug logging (safe to ignore).
-- Transport is `stdio` only. Setting `MCP_TRANSPORT=ws` throws at runtime (`index.js:459`).
+- Transport is `stdio` only (WebSocket throws at `index.js:459`).
 - `console.error` is used extensively for debug output — this is intentional and correct for MCP.
 
 ## bob.jar (build tool)
