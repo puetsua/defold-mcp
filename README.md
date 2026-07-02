@@ -39,14 +39,6 @@ MCP server for the [Defold](https://defold.com) game engine — compatible with 
 ## Getting Started
 
 ```bash
-git clone <repo-url> defold-mcp
-cd defold-mcp
-npm install
-```
-
-Or install globally from npm:
-
-```bash
 npm install -g @puetsua/defold-mcp
 ```
 

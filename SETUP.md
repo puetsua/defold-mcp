@@ -34,7 +34,7 @@ MCP_PORT=37415
 
 ## Per-agent setup
 
-The server runs via `node index.js` over stdio transport. `opencode.json` ships with the repo for auto-detection. All other agents require you to add the config to their respective settings file.
+The server runs via `npx @puetsua/defold-mcp`. `opencode.json` ships with the repo for auto-detection. All other agents require you to add the config to their respective settings file.
 
 ### OpenCode
 
@@ -45,9 +45,9 @@ OpenCode reads this file automatically. No manual setup needed.
 ```json
 {
   "mcpServers": {
-    "@puetsua/defold-mcp": {
-      "command": "node",
-      "args": ["index.js"],
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
         "DEFOLD_PATH": "",
         "BOB_PATH": ""
@@ -66,9 +66,9 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 ```json
 {
   "mcpServers": {
-    "@puetsua/defold-mcp": {
-      "command": "node",
-      "args": ["${workspaceFolder}/index.js"],
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
         "DEFOLD_PATH": "",
         "BOB_PATH": ""
@@ -78,7 +78,7 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 }
 ```
 
-`${workspaceFolder}` resolves to the project root. The `CLAUDE.md` file in the project root provides tool documentation.
+The `CLAUDE.md` file in the project root provides tool documentation.
 
 ### Codex CLI
 
@@ -87,9 +87,9 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 ```json
 {
   "mcpServers": {
-    "@puetsua/defold-mcp": {
-      "command": "node",
-      "args": ["${workspaceFolder}/index.js"],
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
         "DEFOLD_PATH": "",
         "BOB_PATH": ""
@@ -106,9 +106,9 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 ```json
 {
   "mcpServers": {
-    "@puetsua/defold-mcp": {
-      "command": "node",
-      "args": ["${workspaceFolder}/index.js"],
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
         "DEFOLD_PATH": "",
         "MCP_PORT": "37415",
@@ -132,16 +132,14 @@ Unlike coding agents, Claude Desktop uses a **global config file**. Edit the fil
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 
-Add the server entry under `mcpServers`. Use **absolute paths** — `node` must be the full path to the Node binary, and `args` must be the full path to `index.js`:
-
 ```json
 {
   "mcpServers": {
-    "@puetsua/defold-mcp": {
-      "command": "/path/to/node",
-      "args": ["/path/to/defold-mcp/index.js"],
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
-        "DEFOLD_PATH": "/path/to/Defold",
+        "DEFOLD_PATH": "",
         "BOB_PATH": ""
       }
     }
@@ -149,36 +147,31 @@ Add the server entry under `mcpServers`. Use **absolute paths** — `node` must 
 }
 ```
 
-To find your Node path: `which node` (macOS/Linux) or `where node` (Windows).
-
-To find your defold-mcp path: `cd /path/to/defold-mcp && pwd` (or `cd` on Windows).
-
 ## Manual setup (any agent)
 
-If your agent supports MCP but doesn't have a dedicated config file here, add the following to your agent's MCP configuration:
+If your agent supports MCP but doesn't have a dedicated config file here, use:
 
 ```json
 {
   "mcpServers": {
-    "@puetsua/defold-mcp": {
-      "command": "node",
-      "args": ["/path/to/defold-mcp/index.js"],
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
-        "DEFOLD_PATH": "/path/to/Defold"
+        "DEFOLD_PATH": "",
+        "BOB_PATH": ""
       }
     }
   }
 }
 ```
 
-Replace `/path/to/defold-mcp` and `/path/to/Defold` with actual paths for your system.
+Set `DEFOLD_PATH` in your `.env` or directly in the config.
 
 ## Verify the server is working
 
-The server should respond to a `tools/list` JSON-RPC request with 29 tools. Run:
-
 ```bash
-node index.js
+npx @puetsua/defold-mcp
 ```
 
 If the server starts without errors, the setup is correct.

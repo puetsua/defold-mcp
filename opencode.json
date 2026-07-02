@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "@puetsua/defold-mcp": {
-      "command": "node",
-      "args": ["index.js"],
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
       "env": {
         "DEFOLD_PATH": "",
         "BOB_PATH": ""
