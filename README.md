@@ -1,6 +1,36 @@
 # defold-mcp
 
-Fork of [ChadAragorn/defold-mcp](https://github.com/ChadAragorn/defold-mcp) — MCP server for the [Defold](https://defold.com) game engine, compatible with **OpenCode**, **Claude Code**, **Codex CLI**, **Cursor**, and **Claude Desktop**.
+MCP server for the [Defold](https://defold.com) game engine.
+
+## Agent Setup
+
+See [`SETUP.md`](SETUP.md) for detailed setup instructions for popular agents.
+
+## Getting Started
+
+Add the MCP server to your agent config:
+
+```json
+{
+  "mcpServers": {
+    "defold-mcp": {
+      "command": "npx",
+      "args": ["@puetsua/defold-mcp"],
+      "env": {
+        "DEFOLD_PATH": "C:\\Program Files\\Defold\\Defold.exe"
+      }
+    }
+  }
+}
+```
+
+Set `DEFOLD_PATH` to your Defold editor binary:
+
+| Platform | Path |
+|----------|------|
+| Windows | `C:\Program Files\Defold\Defold.exe` |
+| macOS | `/Applications/Defold.app/Contents/MacOS/Defold` |
+| Linux | `/usr/bin/Defold` |
 
 ## Tools
 
@@ -36,37 +66,6 @@ Fork of [ChadAragorn/defold-mcp](https://github.com/ChadAragorn/defold-mcp) — 
 | `add_native_extension` | Add native extension |
 | `get_project_analytics` | Project modification analytics |
 
-## Getting Started
-
-```bash
-npm install -g @puetsua/defold-mcp
-```
-
-Create `.env` in the project root:
-
-```ini
-DEFOLD_PATH=/Applications/Defold.app/Contents/MacOS/Defold
-BOB_PATH=$HOME/defold/bob-1.9.6.jar
-MCP_HOST=localhost
-MCP_PORT=37415
-```
-
-`DEFOLD_PATH` defaults by platform:
-
-| Platform | Path |
-|----------|------|
-| macOS | `/Applications/Defold.app/Contents/MacOS/Defold` |
-| Windows | `C:\Program Files\Defold\Defold.exe` |
-| Linux | `/usr/bin/Defold` |
-
-## Agent Setup
-
-See [`SETUP.md`](SETUP.md) for detailed setup instructions for OpenCode, Claude Code, Codex CLI, Cursor, and Claude Desktop.
-
-## Build & Bundle
-
-Use `setup_bob` to download `bob.jar`, then `build_project` / `bundle_project` for your target platform.
-
 ## License
 
-MIT
+MIT — Fork of [ChadAragorn/defold-mcp](https://github.com/ChadAragorn/defold-mcp).

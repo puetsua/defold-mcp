@@ -1,6 +1,6 @@
 # Setup
 
-Setup instructions for using the defold-mcp server with **OpenCode**, **Claude Code**, **Codex CLI**, **Cursor**, and **Claude Desktop**.
+Setup instructions for using the defold-mcp server with popular agents.
 
 ## Prerequisites
 
