@@ -1,6 +1,6 @@
 # defold-mcp
 
-Fork of [anomalyco/defold-mcp](https://github.com/anomalyco/defold-mcp) — MCP server for the [Defold](https://defold.com) game engine, compatible with **OpenCode**, **Claude Code**, **Codex CLI**, **Cursor**, and **Claude Desktop**.
+Fork of [ChadAragorn/defold-mcp](https://github.com/ChadAragorn/defold-mcp) — MCP server for the [Defold](https://defold.com) game engine, compatible with **OpenCode**, **Claude Code**, **Codex CLI**, **Cursor**, and **Claude Desktop**.
 
 ## Tools
 
