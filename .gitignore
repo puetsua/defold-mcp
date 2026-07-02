@@ -85,7 +85,7 @@ Thumbs.db
 
 # Agent/MCP configs (user-specific paths)
 .opencode/
-!.opencode/opencode.json
+opencode.json
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

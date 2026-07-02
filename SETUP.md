@@ -34,13 +34,13 @@ MCP_PORT=37415
 
 ## Per-agent setup
 
-The server runs via `npx @puetsua/defold-mcp`. `opencode.json` ships with the repo for auto-detection. All other agents require you to add the config to their respective settings file.
+The server runs via `npx @puetsua/defold-mcp`. Create the config file for your agent as described below.
 
 ### OpenCode
 
-**Config:** `opencode.json` (project root — auto-detected)
+**Config:** create `opencode.json` in your project root
 
-OpenCode reads this file automatically. No manual setup needed.
+OpenCode reads this file automatically when present.
 
 ```json
 {
