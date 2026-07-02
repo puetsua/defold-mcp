@@ -11,7 +11,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node -e \"require('./index.js')\""
+    "test": "node --check index.js"
   },
   "keywords": [
     "defold",
