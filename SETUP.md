@@ -45,7 +45,7 @@ OpenCode reads this file automatically. No manual setup needed.
 ```json
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "node",
       "args": ["index.js"],
       "env": {
@@ -66,7 +66,7 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 ```json
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "node",
       "args": ["${workspaceFolder}/index.js"],
       "env": {
@@ -87,7 +87,7 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 ```json
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "node",
       "args": ["${workspaceFolder}/index.js"],
       "env": {
@@ -106,7 +106,7 @@ Set `DEFOLD_PATH` in your `.env` file or directly in the config.
 ```json
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "node",
       "args": ["${workspaceFolder}/index.js"],
       "env": {
@@ -137,7 +137,7 @@ Add the server entry under `mcpServers`. Use **absolute paths** — `node` must 
 ```json
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "/path/to/node",
       "args": ["/path/to/defold-mcp/index.js"],
       "env": {
@@ -160,7 +160,7 @@ If your agent supports MCP but doesn't have a dedicated config file here, add th
 ```json
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "node",
       "args": ["/path/to/defold-mcp/index.js"],
       "env": {

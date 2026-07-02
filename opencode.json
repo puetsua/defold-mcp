@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "defold-mcp": {
+    "@puetsua/defold-mcp": {
       "command": "node",
       "args": ["index.js"],
       "env": {
