@@ -79,6 +79,14 @@ web_modules/
 .env.production.local
 .env.local
 
+# OS files
+.DS_Store
+Thumbs.db
+
+# Agent/MCP configs (user-specific paths)
+.opencode/
+!.opencode/opencode.json
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
