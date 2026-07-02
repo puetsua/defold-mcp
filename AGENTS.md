@@ -3,7 +3,7 @@
 ## Repo structure
 
 - `index.js` is the **entire server** — single file, no entrypoint elsewhere.
-- `package.json` has `"main": "index.js"` and `"bin": {"defold-mcp": "./index.js"}`.
+- `package.json` has `"main": "index.js"` and `"bin": {"defold-mcp": "index.js"}`.
 
 ## Critical: many tool handlers are stubs
 

@@ -1,10 +1,13 @@
 {
-  "name": "defold-mcp",
+  "name": "@puetsua/defold-mcp",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.1.0",
   "description": "MCP server for the Defold game engine",
   "main": "index.js",
   "bin": {
-    "defold-mcp": "./index.js"
+    "defold-mcp": "index.js"
   },
   "scripts": {
     "start": "node index.js",

@@ -44,6 +44,12 @@ cd defold-mcp
 npm install
 ```
 
+Or install globally from npm:
+
+```bash
+npm install -g @puetsua/defold-mcp
+```
+
 Create `.env` in the project root:
 
 ```ini
