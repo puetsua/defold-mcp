@@ -7,45 +7,25 @@
 
 ## Critical: many tool handlers are stubs
 
-The `callTool()` switch (line 384) routes to handlers, but **most handlers beyond line 651 are not implemented** — only `launchDefold`, `runProject`, `createProject`, `listProjects`, and `getProjectSettings` have real bodies. The rest (`createScript`, `editScript`, `createCollection`, `createSprite`, etc.) are either missing entirely or just placeholder comments. Any agent working on this repo should prioritize finishing the stubs.
-
-List of unimplemented handlers (confirmed by reading `index.js`):
-`updateProjectSettings`, `createScript`, `editScript`, `createLuaModule`, `createCollection`, `addGameObject`, `addComponent`, `createSprite`, `createTilemap`, `createParticlefx`, `createSound`, `createCamera`, `createFactory`, `createGui`, `setupPhysics`, `configureRender`, `setupBob`, `buildProject`, `bundleProject`, `debugLogs`, `streamLogs`, `enableHotReload`, `addNativeExtension`, `getProjectAnalytics`
+Only 5 of 29 tools are implemented. See [`docs/tool-handlers.md`](docs/tool-handlers.md) for the full list. Prioritize finishing the stubs.
 
 ## Commands
 
 ```sh
-npm install           # install deps (just @modelcontextprotocol/sdk + utils)
+npm install           # install deps
 npm start             # node index.js — runs the MCP server on stdio
-npm test              # syntax-only check: node -e "require('./index.js')"
+npm test              # syntax-only check: node --check index.js
 ```
 
-No lint, no typecheck, no formatter, no CI — do not waste time looking for them.
-
-## MCP protocol details
-
-- **Stdout** = JSON-RPC messages (protocol); **stderr** = debug logging (safe to ignore).
-- Transport is `stdio` only (WebSocket throws at `index.js:459`).
-- `console.error` is used extensively for debug output — this is intentional and correct for MCP.
-
-## bob.jar (build tool)
-
-- Required by: `build_project`, `bundle_project`, `add_native_extension`, `setup_bob`.
-- Enforces **OpenJDK 21** at runtime (`index.js:498-500`). Older or newer JDK versions will fail validation.
-- Auto-discovered via `DEFOLD_PATH` / `~/defold/bob.jar` / `/usr/local/bin/bob.jar`. Falls back to `setup_bob` tool which downloads from GitHub releases.
+No lint, no typecheck, no formatter — don't look for them.
 
 ## Platform
 
-- `DEFOLD_PATH` defaults to macOS path (`/Applications/Defold.app/...`). Override in `.env` for Windows/Linux.
-- **Node >= 18** required (`package.json` engines field).
+- `DEFOLD_PATH` defaults to macOS path. Override in `.env` for Windows/Linux.
+- **Node >= 18** required.
 
-## Agent configs already in place
+## Further reading
 
-| Agent | File |
-|-------|------|
-| OpenCode | `opencode.json` |
-| Claude Code | `.claude/settings.json` + `CLAUDE.md` |
-| Codex CLI | `.codex/config.json` |
-| Cursor | `.cursor/mcp.json` |
-
-All configs use `node index.js` as the MCP server command over stdio transport. No additional agent wiring needed.
+- [`docs/mcp-protocol.md`](docs/mcp-protocol.md) — stdio/stderr conventions
+- [`docs/bob.md`](docs/bob.md) — bob.jar build tool, JDK 21 requirement
+- [`SETUP.md`](SETUP.md) — agent setup instructions
