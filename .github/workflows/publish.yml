@@ -20,7 +20,7 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest
-      - run: npm version --no-git-tag-version ${{ github.ref_name }}
+      - run: npm version --no-git-tag-version --allow-same-version ${{ github.ref_name }}
       - run: npm install
       - run: npm test
       - run: npm publish --provenance
