@@ -13,25 +13,62 @@ const { exec, execSync, spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const ini = require('ini');
-const yaml = require('js-yaml');
-const chokidar = require('chokidar');
 const { Writable } = require('stream');
 const os = require('os');
 const { https } = require('follow-redirects');
 const http = require('http');
+const pkg = require('./package.json');
 
 process.stdout.setMaxListeners(0);
 
-const MCP_PORT = process.env.MCP_PORT || 37415;
-const MCP_HOST = process.env.MCP_HOST || 'localhost';
 const MCP_TRANSPORT = process.env.MCP_TRANSPORT || 'stdio';
 
 // Server configuration
 const SERVER_INFO = {
   name: 'defold-mcp',
-  version: '1.2.7',
-  description: 'Complete MCP server for Defold game engine with Dotenv and Apple Silicon support'
+  version: pkg.version,
+  description: 'MCP server for the Defold game engine'
 };
+
+// Tools with a real handler in callTool(). Everything else in TOOLS is
+// declared but not yet implemented, so it is hidden from tools/list and
+// rejected with a clear message rather than throwing a TypeError.
+const IMPLEMENTED_TOOLS = new Set([
+  'launch_defold',
+  'run_project',
+  'create_project',
+  'list_projects',
+  'get_project_settings',
+  'engine_info',
+  'run_script',
+  'hot_reload',
+  'screenshot_game'
+]);
+
+// Defold's built-in engine service (debug builds only). Defaults to port 8001,
+// but when the game is launched from the editor DM_SERVICE_PORT is "dynamic"
+// (OS-assigned), so callers may need to pass an explicit port.
+const ENGINE_SERVICE_HOST = process.env.DM_SERVICE_HOST || '127.0.0.1';
+const ENGINE_SERVICE_PORT_DEFAULT = 8001;
+
+// --- Minimal protobuf wire-format encoding (no dependency) ---
+// Only length-delimited (wire type 2) fields with single-byte tags (field
+// numbers < 16) are needed for the engine service messages below.
+function encodeVarint(value) {
+  const bytes = [];
+  let n = value;
+  while (n > 0x7f) {
+    bytes.push((n & 0x7f) | 0x80);
+    n = Math.floor(n / 128);
+  }
+  bytes.push(n);
+  return Buffer.from(bytes);
+}
+
+function lenDelimited(fieldNumber, payload) {
+  const tag = Buffer.from([(fieldNumber << 3) | 2]);
+  return Buffer.concat([tag, encodeVarint(payload.length), payload]);
+}
 
 // Define the tools the server provides
 const TOOLS = [
@@ -288,17 +325,38 @@ const TOOLS = [
     }
   },
   {
-    name: 'game_click',
-    description: 'Trigger a button/action in the running Defold game via the in-game HTTP control server (modules/control.lua on port 38290). Does NOT steal the physical mouse — sends an HTTP GET to http://127.0.0.1:38290/<route>. Pair with screenshot_game for visual verification.',
+    name: 'engine_info',
+    description: 'Query the running Defold game via its built-in engine service (debug builds only). GET /info returns engine version, platform, sha1, and log_port. Doubles as a health check / port-confirmation. Default port 8001; when the game is launched from the editor DM_SERVICE_PORT is "dynamic", so pass the actual port if 8001 fails.',
     parameters: {
-      route: { type: 'string', description: 'Control route (no leading slash). E.g. "start", "menu/show_load", "menu/show_settings", "quit". Use "_ping" to health-check, "_routes" to list registered routes.' },
-      port: { type: 'number', description: 'Control server port (default 38290)', default: 38290, optional: true },
+      host: { type: 'string', description: 'Engine service host (default 127.0.0.1)', default: '127.0.0.1', optional: true },
+      port: { type: 'number', description: 'Engine service port (default 8001, or DM_SERVICE_PORT if numeric)', default: 8001, optional: true },
+      timeoutMs: { type: 'number', description: 'Request timeout in ms (default 2000)', default: 2000, optional: true }
+    }
+  },
+  {
+    name: 'run_script',
+    description: 'Run arbitrary Lua in the running Defold game via the built-in engine service (debug builds only). POSTs a RunScript message to /post/@system/run_script. This is the engine-native way to trigger any game action, e.g. call a menu function or post an input action to "click" a button. Pair with screenshot_game for visual verification.',
+    parameters: {
+      script: { type: 'string', description: 'Lua source to execute in the game, e.g. \'require("main.menu").start()\'' },
+      filename: { type: 'string', description: 'Chunk name shown in error messages', default: 'mcp_run_script.lua', optional: true },
+      host: { type: 'string', description: 'Engine service host (default 127.0.0.1)', default: '127.0.0.1', optional: true },
+      port: { type: 'number', description: 'Engine service port (default 8001, or DM_SERVICE_PORT if numeric)', default: 8001, optional: true },
+      timeoutMs: { type: 'number', description: 'Request timeout in ms (default 5000)', default: 5000, optional: true }
+    }
+  },
+  {
+    name: 'hot_reload',
+    description: 'Hot-reload one or more resources in the running Defold game via the built-in engine service (debug builds only). POSTs a Reload message to /post/@resource/reload. Provide compiled resource paths, e.g. "/main/level.collectionc" or "/main/player.scriptc".',
+    parameters: {
+      resources: { type: 'string', description: 'Comma-separated resource path(s) to reload, e.g. "/main/player.scriptc,/main/level.collectionc"' },
+      host: { type: 'string', description: 'Engine service host (default 127.0.0.1)', default: '127.0.0.1', optional: true },
+      port: { type: 'number', description: 'Engine service port (default 8001, or DM_SERVICE_PORT if numeric)', default: 8001, optional: true },
       timeoutMs: { type: 'number', description: 'Request timeout in ms (default 2000)', default: 2000, optional: true }
     }
   },
   {
     name: 'screenshot_game',
-    description: 'Capture a screenshot of the running Defold game window for visual verification. Returns a base64 PNG image content block. Pair with game_click to verify button presses.',
+    description: 'Capture a screenshot of the running Defold game window for visual verification. Returns a base64 PNG image content block. Pair with run_script to verify button presses.',
     parameters: {
       windowTitle: { type: 'string', description: 'Substring of the game window title to target (default "defold"). Case-insensitive.', default: 'defold', optional: true },
       outputPath: { type: 'string', description: 'Optional path to also save the PNG to disk.', optional: true }
@@ -337,19 +395,22 @@ class DefoldMCPServer {
     // Handle tools/list
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        tools: TOOLS.map(tool => ({
+        tools: TOOLS.filter(tool => IMPLEMENTED_TOOLS.has(tool.name)).map(tool => ({
           name: tool.name,
           description: tool.description,
           inputSchema: {
             type: 'object',
             properties: Object.fromEntries(
-              Object.entries(tool.parameters || {}).map(([key, param]) => [
-                key, 
-                { type: param.type, description: param.description }
-              ])
+              Object.entries(tool.parameters || {}).map(([key, param]) => {
+                const schema = { type: param.type, description: param.description };
+                if (param.default !== undefined) schema.default = param.default;
+                return [key, schema];
+              })
             ),
+            // A param is required only when it is neither marked optional nor
+            // carries a default value.
             required: Object.entries(tool.parameters || {})
-              .filter(([_, param]) => !param.optional)
+              .filter(([_, param]) => !param.optional && param.default === undefined)
               .map(([key, _]) => key)
           }
         }))
@@ -360,7 +421,14 @@ class DefoldMCPServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
         const { name, arguments: args } = request.params;
-        
+
+        if (TOOLS.some(t => t.name === name) && !IMPLEMENTED_TOOLS.has(name)) {
+          return {
+            content: [{ type: 'text', text: `Tool "${name}" is declared but not yet implemented.` }],
+            isError: true
+          };
+        }
+
         if (['build_project', 'bundle_project', 'add_native_extension', 'setup_bob'].includes(name)) {
           await this.ensureBobInitialized();
         }
@@ -440,8 +508,12 @@ class DefoldMCPServer {
         return await this.addNativeExtension(args.projectPath, args.extensionUrl);
       case 'get_project_analytics':
         return await this.getProjectAnalytics(args.projectPath);
-      case 'game_click':
-        return await this.gameClick(args.route, args.port, args.timeoutMs);
+      case 'engine_info':
+        return await this.engineInfo(args.host, args.port, args.timeoutMs);
+      case 'run_script':
+        return await this.runScript(args.script, args.filename, args.host, args.port, args.timeoutMs);
+      case 'hot_reload':
+        return await this.hotReload(args.resources, args.host, args.port, args.timeoutMs);
       case 'screenshot_game':
         return await this.screenshotGame(args.windowTitle, args.outputPath);
       default:
@@ -633,48 +705,104 @@ version = 1.0
     }
   }
   
-  // Continue implementing the other tool methods...
-   
-  async gameClick(route, port, timeoutMs) {
-    try {
-      if (!route || typeof route !== 'string') {
-        throw new Error('route is required (e.g. "start", "menu/show_load")');
-      }
-      const targetPort = port || 38290;
-      const timeout = timeoutMs || 2000;
-      // Strip leading slash if the caller passed one.
-      const cleanRoute = route.replace(/^\/+/, '');
-      const url = `http://127.0.0.1:${targetPort}/${cleanRoute}`;
-      const { status, body } = await this.httpGet(url, timeout);
-      const text = `GET ${url}\nHTTP ${status}\n${body}`;
-      const isError = status >= 400;
-      return { content: [{ type: 'text', text }], isError };
-    } catch (error) {
-      const hint = error.code === 'ECONNREFUSED'
-        ? '\nHint: control server not running. Ensure modules/control.lua is loaded in the game (call control.start() from init, control.poll() from update).'
-        : '';
-      return {
-        content: [{ type: 'text', text: `Error: ${error.message}${hint}` }],
-        isError: true
-      };
-    }
+  // --- Defold built-in engine service (debug builds) ---
+
+  resolveServicePort(port) {
+    if (port) return port;
+    const env = process.env.DM_SERVICE_PORT;
+    if (env && /^\d+$/.test(env)) return parseInt(env, 10);
+    return ENGINE_SERVICE_PORT_DEFAULT;
   }
 
-  httpGet(url, timeoutMs) {
+  httpRequest(method, { host, port, path: reqPath, body, timeoutMs }) {
     return new Promise((resolve, reject) => {
-      const req = http.get(url, (res) => {
+      const headers = {};
+      if (body) {
+        headers['Content-Type'] = 'application/octet-stream';
+        headers['Content-Length'] = body.length;
+      }
+      const req = http.request({ host, port, path: reqPath, method, headers }, (res) => {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') });
-        });
+        res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
         res.on('error', reject);
       });
       req.on('error', reject);
       req.setTimeout(timeoutMs, () => {
         req.destroy(new Error(`request timed out after ${timeoutMs}ms`));
       });
+      if (body) req.write(body);
+      req.end();
     });
+  }
+
+  engineServiceError(error) {
+    const hint = error.code === 'ECONNREFUSED'
+      ? '\nHint: engine service not reachable. It is only present in DEBUG builds (not release bundles). When the game is launched from the editor, DM_SERVICE_PORT is "dynamic" (a random OS-assigned port) — pass the actual port, or launch with DM_SERVICE_PORT=8001 to pin it. Use engine_info to confirm.'
+      : '';
+    return { content: [{ type: 'text', text: `Error: ${error.message}${hint}` }], isError: true };
+  }
+
+  async engineInfo(host, port, timeoutMs) {
+    const targetHost = host || ENGINE_SERVICE_HOST;
+    const targetPort = this.resolveServicePort(port);
+    try {
+      const { status, body } = await this.httpRequest('GET', {
+        host: targetHost, port: targetPort, path: '/info', timeoutMs: timeoutMs || 2000
+      });
+      const text = `GET http://${targetHost}:${targetPort}/info\nHTTP ${status}\n${body}`;
+      return { content: [{ type: 'text', text }], isError: status >= 400 };
+    } catch (error) {
+      return this.engineServiceError(error);
+    }
+  }
+
+  async runScript(script, filename, host, port, timeoutMs) {
+    const targetHost = host || ENGINE_SERVICE_HOST;
+    const targetPort = this.resolveServicePort(port);
+    try {
+      if (!script || typeof script !== 'string') {
+        throw new Error('script (Lua source) is required');
+      }
+      // RunScript { module(1): LuaModule { source(1): LuaSource { script(1) bytes, filename(2) string } } }
+      const luaSource = Buffer.concat([
+        lenDelimited(1, Buffer.from(script, 'utf8')),
+        lenDelimited(2, Buffer.from(filename || 'mcp_run_script.lua', 'utf8'))
+      ]);
+      const body = lenDelimited(1, lenDelimited(1, luaSource));
+      const { status, body: resBody } = await this.httpRequest('POST', {
+        host: targetHost, port: targetPort, path: '/post/@system/run_script',
+        body, timeoutMs: timeoutMs || 5000
+      });
+      const text = `POST http://${targetHost}:${targetPort}/post/@system/run_script (${script.length} chars of Lua)\nHTTP ${status}\n${resBody}`;
+      return { content: [{ type: 'text', text }], isError: status >= 400 };
+    } catch (error) {
+      return this.engineServiceError(error);
+    }
+  }
+
+  async hotReload(resources, host, port, timeoutMs) {
+    const targetHost = host || ENGINE_SERVICE_HOST;
+    const targetPort = this.resolveServicePort(port);
+    try {
+      let list = resources;
+      if (typeof list === 'string') {
+        list = list.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+      if (!Array.isArray(list) || list.length === 0) {
+        throw new Error('resources is required (comma-separated resource paths, e.g. "/main/player.scriptc")');
+      }
+      // Reload { resources(1): repeated string }
+      const body = Buffer.concat(list.map((r) => lenDelimited(1, Buffer.from(r, 'utf8'))));
+      const { status, body: resBody } = await this.httpRequest('POST', {
+        host: targetHost, port: targetPort, path: '/post/@resource/reload',
+        body, timeoutMs: timeoutMs || 2000
+      });
+      const text = `POST http://${targetHost}:${targetPort}/post/@resource/reload\nresources: ${list.join(', ')}\nHTTP ${status}\n${resBody}`;
+      return { content: [{ type: 'text', text }], isError: status >= 400 };
+    } catch (error) {
+      return this.engineServiceError(error);
+    }
   }
 
   async screenshotGame(windowTitle, outputPath) {
@@ -684,7 +812,10 @@ version = 1.0
       // Sanitize outputPath: only allow filesystem-safe characters.
       let pngPath = outputPath || path.join(os.tmpdir(), `defold-mcp-screenshot-${Date.now()}.png`);
       pngPath = path.resolve(pngPath);
-      if (!/^[a-zA-Z0-9_\-\.\/\\:]+$/.test(pngPath)) {
+      // The path is passed as a quoted argument to the shell/PowerShell, so the
+      // only real risk is a character that can break out of the quoting.
+      // Reject those (and control chars); allow spaces and normal path chars.
+      if (/["'`$\r\n]/.test(pngPath)) {
         throw new Error('outputPath contains invalid characters');
       }
 

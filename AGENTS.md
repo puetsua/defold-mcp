@@ -4,16 +4,19 @@
 
 - `index.js` is the **entire server** — single file, no entrypoint elsewhere.
 - `package.json` has `"main": "index.js"` and `"bin": {"defold-mcp": "index.js"}`.
-- `modules/control.lua` is the in-game HTTP control server (port 38290) that `game_click` talks to. It is shipped here so games can copy it in; it is NOT Node code.
-- `modules/control.example.lua` shows the matcha-novel button → route wiring.
 
 ## Critical: many tool handlers are stubs
 
-Only 7 of 31 tools are implemented. See [`docs/tool-handlers.md`](docs/tool-handlers.md) for the full list. Prioritize finishing the stubs.
+Only 9 of 31 tools are implemented. Unimplemented tools are hidden from `tools/list` (see `IMPLEMENTED_TOOLS` in `index.js`). See [`docs/tool-handlers.md`](docs/tool-handlers.md) for the full list. Prioritize finishing the stubs.
 
-## Mouse / click actions
+## Driving a running game
 
-Defold uses raw input — Win32 `SendInput`/`PostMessage` do not work and `SendInput` steals the cursor. Instead, the game ships `modules/control.lua` (HTTP server on port 38290, polled from `update()`). The `game_click` MCP tool is a thin HTTP GET client to `http://127.0.0.1:38290/<route>`. Pair with `screenshot_game` for visual verification. See [`docs/tool-handlers.md`](docs/tool-handlers.md#mouse--click-actions).
+Use Defold's **built-in engine service** (present in debug builds, no in-game code required):
+
+- `run_script` runs arbitrary Lua in the game via `POST /post/@system/run_script` — this triggers any game action, including "clicking" a button by calling its handler or posting an input action.
+- `hot_reload` hits `/post/@resource/reload`; `engine_info` does `GET /info`.
+
+Default port 8001, but when launched from the editor `DM_SERVICE_PORT` is `"dynamic"` (random) — pass the port, or find it via the `dmengine` process's listening ports (`GET /info` confirms). Pair with `screenshot_game` for visual verification. See [`docs/tool-handlers.md`](docs/tool-handlers.md#driving-a-running-game).
 
 ## Commands
 
