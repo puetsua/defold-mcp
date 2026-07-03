@@ -4,7 +4,11 @@ MCP server for the [Defold](https://defold.com) game engine.
 
 ## Agent Setup
 
-See [`SETUP.md`](SETUP.md) for detailed setup instructions for popular agents.
+Paste this one-liner into your agent to have it configure defold-mcp automatically:
+
+```
+Fetch https://raw.githubusercontent.com/puetsua/defold-mcp/refs/heads/main/SETUP.md and follow it to configure defold-mcp as an MCP server for this agent, using the correct config format for your agent type and absolute paths.
+```
 
 ## Getting Started
 
