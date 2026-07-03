@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 require('dotenv').config();
-console.error('Loaded dotenv');
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
@@ -11,34 +10,21 @@ const {
 } = require('@modelcontextprotocol/sdk/types.js');
 
 const { exec, execSync, spawn } = require('child_process');
-console.error('Imported child_process');
 const fs = require('fs').promises;
-console.error('Imported fs');
 const path = require('path');
-console.error('Imported path');
 const ini = require('ini');
-console.error('Imported ini');
 const yaml = require('js-yaml');
-console.error('Imported js-yaml');
 const chokidar = require('chokidar');
-console.error('Imported chokidar');
 const { Writable } = require('stream');
-console.error('Imported stream');
 const os = require('os');
-console.error('Imported os');
 const { https } = require('follow-redirects');
-console.error('Imported follow-redirects');
+const http = require('http');
 
 process.stdout.setMaxListeners(0);
-process.stdout.write('');
-console.error('Forced unbuffered stdout');
 
 const MCP_PORT = process.env.MCP_PORT || 37415;
-console.error(`MCP_PORT: ${MCP_PORT}`);
 const MCP_HOST = process.env.MCP_HOST || 'localhost';
-console.error(`MCP_HOST: ${MCP_HOST}`);
 const MCP_TRANSPORT = process.env.MCP_TRANSPORT || 'stdio';
-console.error(`MCP_TRANSPORT: ${MCP_TRANSPORT}`);
 
 // Server configuration
 const SERVER_INFO = {
@@ -242,9 +228,9 @@ const TOOLS = [
     name: 'setup_bob',
     description: 'Locate, configure, or download bob.jar for build operations',
     parameters: {
-      defoldPath: { type: 'string', description: 'Path to Defold installation (optional)', default: '' },
-      bobPath: { type: 'string', description: 'Custom path to bob.jar (optional)', default: '' },
-      defoldVersion: { type: 'string', description: 'Defold version for downloading bob.jar (e.g., 1.9.6)', default: '' }
+      defoldPath: { type: 'string', description: 'Path to Defold installation (optional)', default: '', optional: true },
+      bobPath: { type: 'string', description: 'Custom path to bob.jar (optional)', default: '', optional: true },
+      defoldVersion: { type: 'string', description: 'Defold version for downloading bob.jar (e.g., 1.9.6)', default: '', optional: true }
     }
   },
   {
@@ -300,19 +286,34 @@ const TOOLS = [
     parameters: {
       projectPath: { type: 'string', description: 'Path to Defold project directory' }
     }
+  },
+  {
+    name: 'game_click',
+    description: 'Trigger a button/action in the running Defold game via the in-game HTTP control server (modules/control.lua on port 38290). Does NOT steal the physical mouse — sends an HTTP GET to http://127.0.0.1:38290/<route>. Pair with screenshot_game for visual verification.',
+    parameters: {
+      route: { type: 'string', description: 'Control route (no leading slash). E.g. "start", "menu/show_load", "menu/show_settings", "quit". Use "_ping" to health-check, "_routes" to list registered routes.' },
+      port: { type: 'number', description: 'Control server port (default 38290)', default: 38290, optional: true },
+      timeoutMs: { type: 'number', description: 'Request timeout in ms (default 2000)', default: 2000, optional: true }
+    }
+  },
+  {
+    name: 'screenshot_game',
+    description: 'Capture a screenshot of the running Defold game window for visual verification. Returns a base64 PNG image content block. Pair with game_click to verify button presses.',
+    parameters: {
+      windowTitle: { type: 'string', description: 'Substring of the game window title to target (default "defold"). Case-insensitive.', default: 'defold', optional: true },
+      outputPath: { type: 'string', description: 'Optional path to also save the PNG to disk.', optional: true }
+    }
   }
 ];
 
-const DEFOLD_PATH = process.env.DEFOLD_PATH || '/Applications/Defold.app/Contents/MacOS/Defold';
-console.error(`DEFOLD_PATH: ${DEFOLD_PATH}`);
+const DEFOLD_PATH = process.env.DEFOLD_PATH || (process.platform === 'win32'
+  ? 'C:\\Program Files\\Defold\\Defold.exe'
+  : '/Applications/Defold.app/Contents/MacOS/Defold');
 let BOB_PATH = process.env.BOB_PATH || null;
-console.error(`BOB_PATH: ${BOB_PATH}`);
 const BOB_DOWNLOAD_URL = 'https://github.com/defold/defold/releases/download';
-console.error(`BOB_DOWNLOAD_URL: ${BOB_DOWNLOAD_URL}`);
 
 class DefoldMCPServer {
   constructor() {
-    console.error('Constructing DefoldMCPServer');
     this.logStreams = new Map();
     this.watchers = new Map();
     this.analytics = new Map();
@@ -335,7 +336,6 @@ class DefoldMCPServer {
   setupRequestHandlers() {
     // Handle tools/list
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      console.error('Handling tools/list request');
       return {
         tools: TOOLS.map(tool => ({
           name: tool.name,
@@ -360,7 +360,6 @@ class DefoldMCPServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
         const { name, arguments: args } = request.params;
-        console.error(`Handling tools/call request for tool: ${name}`);
         
         if (['build_project', 'bundle_project', 'add_native_extension', 'setup_bob'].includes(name)) {
           await this.ensureBobInitialized();
@@ -441,21 +440,20 @@ class DefoldMCPServer {
         return await this.addNativeExtension(args.projectPath, args.extensionUrl);
       case 'get_project_analytics':
         return await this.getProjectAnalytics(args.projectPath);
+      case 'game_click':
+        return await this.gameClick(args.route, args.port, args.timeoutMs);
+      case 'screenshot_game':
+        return await this.screenshotGame(args.windowTitle, args.outputPath);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
   }
   
   async start() {
-    console.error('Starting server');
-    // Choose transport based on environment
     if (MCP_TRANSPORT === 'stdio') {
-      console.error('Starting Defold MCP Server on stdio');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      console.error('Stdio connection established');
     } else {
-      console.error(`Starting Defold MCP Server on ws://${MCP_HOST}:${MCP_PORT}`);
       throw new Error('WebSocket transport not yet implemented with MCP SDK');
     }
   }
@@ -468,10 +466,10 @@ class DefoldMCPServer {
   }
 
   async initializeBobPath() {
-    console.error('Initializing bob.jar path');
     if (BOB_PATH) return;
     const possiblePaths = [
       path.join(path.dirname(DEFOLD_PATH), 'Contents', 'Resources', 'bob.jar'),
+      path.join(path.dirname(DEFOLD_PATH), 'Resources', 'bob.jar'),
       path.join(os.homedir(), 'defold', 'bob.jar'),
       '/usr/local/bin/bob.jar'
     ];
@@ -480,7 +478,6 @@ class DefoldMCPServer {
         await fs.access(p);
         if (await this.validateBobJar(p)) {
           BOB_PATH = p;
-          console.error(`Found bob.jar at ${BOB_PATH}`);
           return;
         }
       } catch {}
@@ -489,7 +486,6 @@ class DefoldMCPServer {
   }
 
   async validateBobJar(bobPath) {
-    console.error(`Validating bob.jar at ${bobPath}`);
     try {
       const output = execSync(`java -jar "${bobPath}" --version`, { encoding: 'utf8' });
       if (!output.includes('bob.jar')) {
@@ -507,7 +503,6 @@ class DefoldMCPServer {
   }
 
   async downloadBobJar(version, targetPath) {
-    console.error(`Downloading bob.jar version ${version} to ${targetPath}`);
     const url = `${BOB_DOWNLOAD_URL}/${version}/bob.jar`;
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     return new Promise((resolve, reject) => {
@@ -551,28 +546,16 @@ class DefoldMCPServer {
       // Verify the game.project file exists
       try {
         await fs.access(resolvedPath);
-        console.error(`Found game.project at: ${resolvedPath}`);
       } catch (accessError) {
-        console.error(`game.project not found at: ${resolvedPath}`);
         throw new Error(`Cannot find game.project at: ${resolvedPath}`);
       }
       
-      console.error(`Launching Defold with path: ${resolvedPath}`);
       const cmd = `"${DEFOLD_PATH}" "${resolvedPath}"`;
       exec(cmd, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Error launching Defold: ${error.message}`);
-        }
-        if (stderr) {
-          console.error(`Defold stderr: ${stderr}`);
-        }
-        if (stdout) {
-          console.error(`Defold stdout: ${stdout}`);
-        }
+        if (error) console.error(`Error launching Defold: ${error.message}`);
       });
       return { content: [{ type: 'text', text: `Defold editor launched` }] };
     } catch (error) {
-      console.error(`Error launching Defold: ${error.message}`);
       return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
     }
   }
@@ -583,7 +566,7 @@ class DefoldMCPServer {
       const child = spawn(cmd, { shell: true, stdio: 'pipe' });
       const logStream = new Writable({
         write(chunk, encoding, callback) {
-          console.error(`Defold log: ${chunk.toString()}`);
+          console.error(chunk.toString());
           callback();
         }
       });
@@ -651,15 +634,156 @@ version = 1.0
   }
   
   // Continue implementing the other tool methods...
+   
+  async gameClick(route, port, timeoutMs) {
+    try {
+      if (!route || typeof route !== 'string') {
+        throw new Error('route is required (e.g. "start", "menu/show_load")');
+      }
+      const targetPort = port || 38290;
+      const timeout = timeoutMs || 2000;
+      // Strip leading slash if the caller passed one.
+      const cleanRoute = route.replace(/^\/+/, '');
+      const url = `http://127.0.0.1:${targetPort}/${cleanRoute}`;
+      const { status, body } = await this.httpGet(url, timeout);
+      const text = `GET ${url}\nHTTP ${status}\n${body}`;
+      const isError = status >= 400;
+      return { content: [{ type: 'text', text }], isError };
+    } catch (error) {
+      const hint = error.code === 'ECONNREFUSED'
+        ? '\nHint: control server not running. Ensure modules/control.lua is loaded in the game (call control.start() from init, control.poll() from update).'
+        : '';
+      return {
+        content: [{ type: 'text', text: `Error: ${error.message}${hint}` }],
+        isError: true
+      };
+    }
+  }
+
+  httpGet(url, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const req = http.get(url, (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') });
+        });
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`request timed out after ${timeoutMs}ms`));
+      });
+    });
+  }
+
+  async screenshotGame(windowTitle, outputPath) {
+    try {
+      const title = (windowTitle || 'defold').toString();
+      const platform = process.platform;
+      // Sanitize outputPath: only allow filesystem-safe characters.
+      let pngPath = outputPath || path.join(os.tmpdir(), `defold-mcp-screenshot-${Date.now()}.png`);
+      pngPath = path.resolve(pngPath);
+      if (!/^[a-zA-Z0-9_\-\.\/\\:]+$/.test(pngPath)) {
+        throw new Error('outputPath contains invalid characters');
+      }
+
+      if (platform === 'win32') {
+        await this.screenshotWin32(title, pngPath);
+      } else if (platform === 'darwin') {
+        // macOS: use screencapture for full screen.
+        execSync(`screencapture -x ${this.shellQuote(pngPath)}`);
+      } else {
+        // Linux: try import (ImageMagick), fall back to scrot.
+        try {
+          execSync(`import -window root ${this.shellQuote(pngPath)}`);
+        } catch {
+          execSync(`scrot ${this.shellQuote(pngPath)}`);
+        }
+      }
+
+      const data = await fs.readFile(pngPath);
+      const base64 = data.toString('base64');
+      const content = [
+        { type: 'image', data: base64, mimeType: 'image/png' },
+        { type: 'text', text: `Screenshot saved to ${pngPath}` }
+      ];
+      return { content };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
+    }
+  }
+
+  shellQuote(s) {
+    // Single-quote for POSIX shells; escape embedded single quotes.
+    return "'" + String(s).replace(/'/g, "'\\''") + "'";
+  }
+
+  async screenshotWin32(title, pngPath) {
+    // Static PowerShell script — NO user input is interpolated into the script body.
+    // User-supplied title and pngPath are passed as PowerShell arguments (params).
+    const psScript = `param([string]$WinTitle, [string]$OutPath)
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class W {
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+}
+"@
+$hwnd = [IntPtr]::Zero
+$gameProcs = Get-Process -Name 'dmengine','Dmengine' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+if ($gameProcs) { $hwnd = $gameProcs[0].MainWindowHandle }
+if ($hwnd -eq [IntPtr]::Zero -and $WinTitle) {
+  $procs = Get-Process | Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle.ToLower().Contains($WinTitle.ToLower()) }
+  if ($procs) { $hwnd = $procs[0].MainWindowHandle }
+}
+if ($hwnd -eq [IntPtr]::Zero) {
+  throw "No matching game window found"
+}
+[void][W]::ShowWindow($hwnd, 9)
+Start-Sleep -Milliseconds 300
+[void][W]::SetForegroundWindow($hwnd)
+Start-Sleep -Milliseconds 800
+$r = New-Object W+RECT
+[void][W]::GetClientRect($hwnd, [ref]$r)
+$pt = New-Object W+POINT
+[void][W]::ClientToScreen($hwnd, [ref]$pt)
+$w = $r.Right - $r.Left
+$ht = $r.Bottom - $r.Top
+if ($w -le 0 -or $ht -le 0) { throw "window rect invalid" }
+$bmp = New-Object System.Drawing.Bitmap $w, $ht
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($pt.X, $pt.Y, 0, 0, $bmp.Size)
+$g.Dispose()
+$bmp.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose()
+`;
+    const tmpScript = path.join(os.tmpdir(), `defold-mcp-screenshot-${Date.now()}.ps1`);
+    await fs.writeFile(tmpScript, psScript, 'utf8');
+    try {
+      // Pass user input as PowerShell params — no string interpolation into the script.
+      execSync(
+        `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}" -WinTitle "${title.replace(/["`$]/g, '')}" -OutPath "${pngPath}"`,
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+    } finally {
+      await fs.unlink(tmpScript).catch(() => {});
+    }
+  }
 }
 
 // Start the server
 async function main() {
   const server = new DefoldMCPServer();
-  console.error('Server instance created');
   try {
     await server.start();
-    console.error('Server start completed');
   } catch (error) {
     console.error('Server start error:', error);
     process.exit(1);
