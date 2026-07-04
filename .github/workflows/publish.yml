@@ -9,6 +9,11 @@ on:
 
 jobs:
   publish:
+    # A tag push does the actual npm publish. Creating a GitHub Release (which
+    # records the changelog notes) fires the `release` event too, but the tag
+    # was already published — so skip it here to avoid a duplicate publish that
+    # fails with "cannot publish over the previously published versions".
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
