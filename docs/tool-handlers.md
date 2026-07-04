@@ -15,6 +15,7 @@ Unimplemented tools are **hidden from `tools/list`** and, if called directly, re
 - `run_script` — run arbitrary Lua in the running game via `POST /post/@system/run_script`. Engine-native; no in-game code required.
 - `hot_reload` — reload compiled resources via `POST /post/@resource/reload`.
 - `screenshot_game` — capture a PNG of the running game window (base64 image content block). Pair with `run_script` for visual verification.
+- `game_click` — **real OS-level mouse click** on the game window at client-area pixel `(x, y)` (same coordinate space/size as a `screenshot_game` image). Drives the actual OS cursor, so the click travels the full input path (focus → input binding → `on_input` → `gui.pick_node` hit-test) — the only tool that proves a user can actually reach a button. **Off by default**: hidden from `tools/list` and refuses to run unless `DEFOLD_MCP_ENABLE_OS_CLICK=1`, because it moves the user's physical cursor and briefly steals window focus (cursor is restored after). Platforms: **Windows** native; **Linux** X11 via `xdotool` (blocked on Wayland); **macOS** experimental via `cliclick` + Accessibility permission.
 
 ## Unimplemented (stubs)
 
@@ -60,9 +61,15 @@ The protobuf bodies are hand-encoded in `index.js` (no dependency); message shap
 
 ### "Clicking" a button
 
-There's no pixel-level click; a Defold button is just a handler. Two equivalent approaches via `run_script`:
-- Call the function the button invokes directly, e.g. `require("main.menu").start()`.
-- Post the same message/input action the button would generate, e.g. `msg.post("main:/gui#menu", "start")`.
+Two very different things get called "clicking" — keep them separate:
+
+**Triggering game logic (`run_script`)** — a Defold button is ultimately just a handler, so you can invoke it directly:
+- Call the function the button invokes, e.g. `require("main.menu").start()`.
+- Post the same message the button would generate, e.g. `msg.post("main:/gui#menu", "start")`.
+
+This runs the game's *response* to a click, but it **does not prove a user can reach the button**. It skips window focus, `acquire_input_focus`, coordinate transforms, and `gui.pick_node` hit-testing — so a button with a wrong hitbox, missing input focus, or bad z-order still "passes." Do **not** treat a successful `run_script` as verification that a button is clickable.
+
+**Verifying a real user click (`game_click`)** — `game_click { x, y }` performs an actual OS mouse click at the given client-area pixel, so it exercises the entire input pipeline the way a user does. This is what catches the bugs `run_script` hides (coordinate mismatch, no input focus, occlusion). It is opt-in (`DEFOLD_MCP_ENABLE_OS_CLICK=1`) because it moves the user's physical cursor; see the tool entry above for platform requirements. For finding *why* a click fails, reading the `on_input`/focus/coordinate-transform chain in code is often faster than clicking; use `game_click` to confirm the fix.
 
 ### `run_script` safety (read before injecting Lua)
 

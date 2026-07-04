@@ -36,6 +36,10 @@ Set `DEFOLD_PATH` to your Defold editor binary:
 | macOS | `/Applications/Defold.app/Contents/MacOS/Defold` |
 | Linux | `/usr/bin/Defold` |
 
+### Optional: real mouse-click verification
+
+`game_click { x, y }` performs a **real OS-level mouse click** on the running game window, so it exercises the full user input path (focus → `on_input` → `gui.pick_node` hit-test) — the only tool that proves a button is actually reachable, unlike `run_script` which just calls the handler. It is **off by default** because it moves your physical cursor and briefly steals window focus. Enable it with `"DEFOLD_MCP_ENABLE_OS_CLICK": "1"` in the `env` block. Platforms: Windows (native), Linux (X11, needs `xdotool`), macOS (experimental, needs `cliclick` + Accessibility permission).
+
 ## Tools
 
 | Tool | Description |

@@ -30,6 +30,14 @@ const SERVER_INFO = {
   description: 'MCP server for the Defold game engine'
 };
 
+// OS-level real mouse click (game_click) is OFF by default: it drives the single
+// system cursor, so it moves the user's physical mouse and briefly steals window
+// focus. Enable deliberately with DEFOLD_MCP_ENABLE_OS_CLICK=1 when you want a
+// genuine end-to-end input test (the only way to prove a button is reachable).
+const OS_CLICK_ENABLED = /^(1|true|yes|on)$/i.test(
+  String(process.env.DEFOLD_MCP_ENABLE_OS_CLICK || '').trim()
+);
+
 // Tools with a real handler in callTool(). Everything else in TOOLS is
 // declared but not yet implemented, so it is hidden from tools/list and
 // rejected with a clear message rather than throwing a TypeError.
@@ -44,6 +52,10 @@ const IMPLEMENTED_TOOLS = new Set([
   'hot_reload',
   'screenshot_game'
 ]);
+
+// Only advertise game_click when the operator has opted in; otherwise it stays
+// hidden from tools/list (and its handler still refuses with a clear message).
+if (OS_CLICK_ENABLED) IMPLEMENTED_TOOLS.add('game_click');
 
 // Defold's built-in engine service (debug builds only). Defaults to port 8001,
 // but when the game is launched from the editor DM_SERVICE_PORT is "dynamic"
@@ -361,6 +373,16 @@ const TOOLS = [
       windowTitle: { type: 'string', description: 'Substring of the game window title to target (default "defold"). Case-insensitive.', default: 'defold', optional: true },
       outputPath: { type: 'string', description: 'Optional path to also save the PNG to disk.', optional: true }
     }
+  },
+  {
+    name: 'game_click',
+    description: 'Perform a REAL OS-level mouse click on the running Defold game window at pixel (x, y), measured from the TOP-LEFT of the window client area — the same coordinate space and size as a screenshot_game image. Unlike run_script (which calls a handler directly and cannot prove a button is actually reachable), this drives the real OS cursor so the click travels the full input pipeline: window focus, input binding, on_input, and gui.pick_node hit-testing. It is the only tool that verifies a user can truly reach a button (catches wrong hitbox, missing acquire_input_focus, bad z-order). DISABLED unless DEFOLD_MCP_ENABLE_OS_CLICK is set, because it moves the user\'s physical mouse pointer and briefly steals window focus (the cursor is restored afterwards). Platform support: Windows (native), Linux (X11, needs xdotool), macOS (experimental, needs cliclick + Accessibility permission).',
+    parameters: {
+      x: { type: 'number', description: 'X pixel from the LEFT edge of the game window client area (matches a screenshot_game image).' },
+      y: { type: 'number', description: 'Y pixel from the TOP edge of the game window client area (OS top-left origin; note Defold\'s action.y uses a bottom-left origin, so it is NOT the same as this y).' },
+      windowTitle: { type: 'string', description: 'Substring of the game window title to target (default "defold"). Case-insensitive.', default: 'defold', optional: true },
+      button: { type: 'string', description: 'Mouse button: "left" (default) or "right".', default: 'left', optional: true }
+    }
   }
 ];
 
@@ -422,7 +444,10 @@ class DefoldMCPServer {
       try {
         const { name, arguments: args } = request.params;
 
-        if (TOOLS.some(t => t.name === name) && !IMPLEMENTED_TOOLS.has(name)) {
+        // game_click IS implemented but hidden until opted in; let it reach its
+        // handler so a direct call returns the clear "how to enable" message
+        // rather than the misleading "not yet implemented" one.
+        if (name !== 'game_click' && TOOLS.some(t => t.name === name) && !IMPLEMENTED_TOOLS.has(name)) {
           return {
             content: [{ type: 'text', text: `Tool "${name}" is declared but not yet implemented.` }],
             isError: true
@@ -516,6 +541,8 @@ class DefoldMCPServer {
         return await this.hotReload(args.resources, args.host, args.port, args.timeoutMs);
       case 'screenshot_game':
         return await this.screenshotGame(args.windowTitle, args.outputPath);
+      case 'game_click':
+        return await this.gameClick(args.x, args.y, args.windowTitle, args.button);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -906,6 +933,209 @@ $bmp.Dispose()
       );
     } finally {
       await fs.unlink(tmpScript).catch(() => {});
+    }
+  }
+
+  // Real OS-level mouse click on the running game window. This is the only tool
+  // that exercises the genuine user input path (focus -> input binding ->
+  // on_input -> gui.pick_node hit-test); run_script-clicking cannot. Gated on
+  // DEFOLD_MCP_ENABLE_OS_CLICK because it moves the user's physical cursor.
+  async gameClick(x, y, windowTitle, button) {
+    try {
+      if (!OS_CLICK_ENABLED) {
+        return {
+          content: [{ type: 'text', text: 'game_click is disabled. It performs a real OS-level mouse click that moves your physical cursor and briefly steals window focus. To enable it, set DEFOLD_MCP_ENABLE_OS_CLICK=1 in the environment (or .env) and restart the MCP server.' }],
+          isError: true
+        };
+      }
+      const px = Number(x);
+      const py = Number(y);
+      if (!Number.isFinite(px) || !Number.isFinite(py) || px < 0 || py < 0) {
+        throw new Error('x and y must be non-negative numbers (pixels from the top-left of the game window client area, matching a screenshot_game image)');
+      }
+      const ix = Math.round(px);
+      const iy = Math.round(py);
+      const btn = (button || 'left').toString().toLowerCase();
+      if (btn !== 'left' && btn !== 'right') {
+        throw new Error('button must be "left" or "right"');
+      }
+      const title = (windowTitle || 'defold').toString();
+      const platform = process.platform;
+
+      if (platform === 'win32') {
+        await this.gameClickWin32(title, ix, iy, btn);
+      } else if (platform === 'linux') {
+        await this.gameClickLinux(title, ix, iy, btn);
+      } else if (platform === 'darwin') {
+        await this.gameClickDarwin(title, ix, iy, btn);
+      } else {
+        throw new Error(`OS-level game_click is not supported on ${platform}`);
+      }
+
+      return { content: [{ type: 'text', text: `Clicked ${btn} at client (${ix}, ${iy}) of game window "${title}". Use screenshot_game to verify the result.` }] };
+    } catch (error) {
+      return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
+    }
+  }
+
+  async gameClickWin32(title, x, y, button) {
+    // Static PowerShell script — NO user input is interpolated into the body.
+    // WinTitle, X, Y and Button are passed as typed PowerShell parameters.
+    const psScript = `param([string]$WinTitle, [int]$X, [int]$Y, [string]$Button)
+$ErrorActionPreference = 'Stop'
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class C {
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, IntPtr e);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+}
+"@
+$hwnd = [IntPtr]::Zero
+$gameProcs = Get-Process -Name 'dmengine','Dmengine' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+if ($gameProcs) { $hwnd = $gameProcs[0].MainWindowHandle }
+if ($hwnd -eq [IntPtr]::Zero -and $WinTitle) {
+  $procs = Get-Process | Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle.ToLower().Contains($WinTitle.ToLower()) }
+  if ($procs) { $hwnd = $procs[0].MainWindowHandle }
+}
+if ($hwnd -eq [IntPtr]::Zero) { throw "No matching game window found" }
+[void][C]::ShowWindow($hwnd, 9)
+Start-Sleep -Milliseconds 200
+[void][C]::SetForegroundWindow($hwnd)
+Start-Sleep -Milliseconds 500
+$r = New-Object C+RECT
+[void][C]::GetClientRect($hwnd, [ref]$r)
+$w = $r.Right - $r.Left
+$ht = $r.Bottom - $r.Top
+if ($w -le 0 -or $ht -le 0) { throw "window rect invalid" }
+if ($X -ge $w -or $Y -ge $ht) { throw "click ($X,$Y) is outside the game window client area ${w}x${ht}" }
+$pt = New-Object C+POINT
+$pt.X = $X
+$pt.Y = $Y
+[void][C]::ClientToScreen($hwnd, [ref]$pt)
+$orig = New-Object C+POINT
+[void][C]::GetCursorPos([ref]$orig)
+[void][C]::SetCursorPos($pt.X, $pt.Y)
+Start-Sleep -Milliseconds 40
+if ($Button -eq 'right') {
+  [C]::mouse_event(0x0008, 0, 0, 0, [IntPtr]::Zero)
+  [C]::mouse_event(0x0010, 0, 0, 0, [IntPtr]::Zero)
+} else {
+  [C]::mouse_event(0x0002, 0, 0, 0, [IntPtr]::Zero)
+  [C]::mouse_event(0x0004, 0, 0, 0, [IntPtr]::Zero)
+}
+Start-Sleep -Milliseconds 40
+[void][C]::SetCursorPos($orig.X, $orig.Y)
+`;
+    const tmpScript = path.join(os.tmpdir(), `defold-mcp-click-${Date.now()}.ps1`);
+    await fs.writeFile(tmpScript, psScript, 'utf8');
+    try {
+      execSync(
+        `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}" -WinTitle "${title.replace(/["`$]/g, '')}" -X ${x} -Y ${y} -Button "${button}"`,
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+    } finally {
+      await fs.unlink(tmpScript).catch(() => {});
+    }
+  }
+
+  async gameClickLinux(title, x, y, button) {
+    // X11 only; Wayland blocks synthetic input. Requires xdotool.
+    try {
+      execSync('command -v xdotool', { stdio: 'ignore' });
+    } catch {
+      throw new Error('xdotool is required for game_click on Linux (install it, e.g. "apt install xdotool"). Note: X11 only — synthetic input is blocked under Wayland.');
+    }
+    const btnNum = button === 'right' ? 3 : 1;
+    const safeTitle = this.shellQuote(title);
+    // Find the game window: prefer a dmengine window, fall back to title match.
+    let winId = '';
+    try {
+      winId = execSync(`xdotool search --name dmengine`, { encoding: 'utf8' }).trim().split('\n')[0] || '';
+    } catch { /* fall through to title search */ }
+    if (!winId) {
+      try {
+        winId = execSync(`xdotool search --name ${safeTitle}`, { encoding: 'utf8' }).trim().split('\n')[0] || '';
+      } catch { /* handled below */ }
+    }
+    if (!winId) throw new Error('No matching game window found (searched dmengine and title)');
+    const geo = execSync(`xdotool getwindowgeometry --shell ${winId}`, { encoding: 'utf8' });
+    const gx = parseInt((geo.match(/^X=(-?\d+)/m) || [])[1], 10);
+    const gy = parseInt((geo.match(/^Y=(-?\d+)/m) || [])[1], 10);
+    const gw = parseInt((geo.match(/^WIDTH=(\d+)/m) || [])[1], 10);
+    const gh = parseInt((geo.match(/^HEIGHT=(\d+)/m) || [])[1], 10);
+    if (!Number.isFinite(gx) || !Number.isFinite(gy)) throw new Error('could not read game window geometry');
+    if (x >= gw || y >= gh) throw new Error(`click (${x},${y}) is outside the game window ${gw}x${gh}`);
+    // Save cursor, activate window, click at window-relative coords, restore cursor.
+    const loc = execSync('xdotool getmouselocation --shell', { encoding: 'utf8' });
+    const ox = parseInt((loc.match(/^X=(-?\d+)/m) || [])[1], 10);
+    const oy = parseInt((loc.match(/^Y=(-?\d+)/m) || [])[1], 10);
+    execSync(`xdotool windowactivate --sync ${winId}`, { stdio: 'ignore' });
+    execSync(`xdotool mousemove --sync ${gx + x} ${gy + y} click ${btnNum}`, { stdio: 'ignore' });
+    if (Number.isFinite(ox) && Number.isFinite(oy)) {
+      execSync(`xdotool mousemove ${ox} ${oy}`, { stdio: 'ignore' });
+    }
+  }
+
+  async gameClickDarwin(title, x, y, button) {
+    // Experimental: needs cliclick and Accessibility permission for the host app.
+    // Window origin comes from AppleScript bounds (includes title bar), so the
+    // mapping can be off by the title-bar height for non-borderless windows.
+    try {
+      execSync('command -v cliclick', { stdio: 'ignore' });
+    } catch {
+      throw new Error('cliclick is required for game_click on macOS ("brew install cliclick"), and the host app needs Accessibility permission (System Settings > Privacy & Security > Accessibility).');
+    }
+    // Get window position of the game process (try dmengine, then title match).
+    const osa = `
+set winX to missing value
+set winY to missing value
+tell application "System Events"
+  set procs to (every process whose name contains "dmengine")
+  if (count of procs) is 0 then
+    set procs to (every process whose name contains "${title.replace(/["\\]/g, '')}")
+  end if
+  if (count of procs) > 0 then
+    set p to item 1 of procs
+    if (count of windows of p) > 0 then
+      set pos to position of window 1 of p
+      set winX to item 1 of pos
+      set winY to item 2 of pos
+    end if
+  end if
+end tell
+if winX is missing value then
+  error "No matching game window found"
+end if
+return (winX as integer) & "," & (winY as integer)`;
+    const tmp = path.join(os.tmpdir(), `defold-mcp-click-${Date.now()}.applescript`);
+    await fs.writeFile(tmp, osa, 'utf8');
+    let originX;
+    let originY;
+    try {
+      const out = execSync(`osascript ${this.shellQuote(tmp)}`, { encoding: 'utf8' }).trim();
+      const parts = out.split(',');
+      originX = parseInt(parts[0], 10);
+      originY = parseInt(parts[1], 10);
+    } finally {
+      await fs.unlink(tmp).catch(() => {});
+    }
+    if (!Number.isFinite(originX) || !Number.isFinite(originY)) {
+      throw new Error('could not read game window position via AppleScript');
+    }
+    const btnFlag = button === 'right' ? 'rc' : 'c';
+    // Save cursor, click, restore. cliclick: p=print current, m=move, c/rc=click.
+    const before = execSync('cliclick p', { encoding: 'utf8' }).trim(); // "x,y"
+    execSync(`cliclick ${btnFlag}:${originX + x},${originY + y}`, { stdio: 'ignore' });
+    if (/^-?\d+,-?\d+$/.test(before)) {
+      execSync(`cliclick m:${before}`, { stdio: 'ignore' });
     }
   }
 }
